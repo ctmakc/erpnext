@@ -540,10 +540,26 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	][:5]
 	queued_social_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"][:5]
 	dm_sent_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"][:5]
+	follow_up_due_rows = [
+		row
+		for row in rows
+		if (getattr(row, "social_stage", "") or "") == "DM Sent"
+		and getattr(row, "next_action_on", None)
+		and row.next_action_on <= now_datetime()
+	][:5]
 	social_replied_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"][:5]
 	ready_for_email_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"][:5]
 	queued_social = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"])
 	dm_sent = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"])
+	follow_up_due = len(
+		[
+			row
+			for row in rows
+			if (getattr(row, "social_stage", "") or "") == "DM Sent"
+			and getattr(row, "next_action_on", None)
+			and row.next_action_on <= now_datetime()
+		]
+	)
 	social_replied = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"])
 	ready_for_email = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"])
 
@@ -611,7 +627,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	    </div>
 	  </div>
 
-	  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;">
+	  <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;">
 	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
 	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 	        <div style="font-weight:700;">Queued Social</div>
@@ -635,6 +651,19 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'social_outreach_task', '') or 'No task')} · {html.escape(getattr(row, 'social_next_step', '') or 'Wait for reply')}</span></div>"
 				for row in dm_sent_rows
 			) or "<div style='color:#64748b;'>No sent social items waiting.</div>"}
+	      </div>
+	    </div>
+
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">Follow-Up Due</div>
+	        {badge(str(follow_up_due), "red")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'social_follow_up_task', '') or getattr(row, 'social_outreach_task', '') or 'No task')} · {html.escape(getattr(row, 'social_next_step', '') or 'Send follow-up DM')}</span></div>"
+				for row in follow_up_due_rows
+			) or "<div style='color:#64748b;'>No overdue social follow-ups.</div>"}
 	      </div>
 	    </div>
 
@@ -1445,6 +1474,8 @@ def backfill_row_operational_fields(campaign: RemoldaCampaign, row) -> None:
 				row.social_next_step = "Stop outreach"
 			else:
 				row.social_next_step = "Send DM via social profile"
+		if row.social_stage == "DM Sent" and row.next_action_on and row.next_action_on <= now_datetime():
+			row.social_next_step = "Send follow-up DM or escalate to email research"
 
 
 def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
@@ -1477,6 +1508,15 @@ def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -
 		mark_deal_closed(row, row.response_status, logs)
 		return
 
+	if (row.source_channel or "") in {"LinkedIn", "Facebook"} and row.response_status == "Sent":
+		if row.next_action_on and row.next_action_on <= now_datetime():
+			row.social_stage = "DM Sent"
+			row.social_next_step = "Send follow-up DM or escalate to email research"
+			row.social_follow_up_task = ensure_social_follow_up_task(row, campaign)
+		else:
+			row.social_stage = "DM Sent"
+			row.social_next_step = "Wait for reply or identify decision maker email"
+
 	if not row.email:
 		if row.response_status in (None, "", "Awaiting Outreach", "Ready To Send"):
 			row.response_status = "No Email Found"
@@ -1485,6 +1525,10 @@ def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -
 		if (row.source_channel or "") in {"LinkedIn", "Facebook"} and getattr(row, "source_profile_url", None):
 			row.social_outreach_body = build_social_outreach_body(campaign, row)
 			row.social_outreach_task = ensure_social_outreach_task(row, campaign)
+			if row.response_status == "Sent" and row.next_action_on and row.next_action_on <= now_datetime():
+				row.social_stage = "DM Sent"
+				row.social_next_step = "Send follow-up DM or escalate to email research"
+				row.social_follow_up_task = ensure_social_follow_up_task(row, campaign)
 		row.contact_gap_status = row.contact_gap_status or "Needs Email"
 		return
 
@@ -2313,6 +2357,48 @@ def ensure_social_outreach_task(row, campaign: RemoldaCampaign) -> str:
 			),
 			"exp_start_date": now_datetime(),
 			"exp_end_date": add_days(now_datetime(), 2),
+			"company": campaign.company,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def ensure_social_follow_up_task(row, campaign: RemoldaCampaign) -> str:
+	subject = f"Follow up on {row.source_channel or 'social'} outreach to {row.company_name}"
+	if getattr(row, "social_follow_up_task", None) and frappe.db.exists("Task", row.social_follow_up_task):
+		task_name = row.social_follow_up_task
+	else:
+		task_name = frappe.db.get_value("Task", {"subject": subject}, "name")
+	description = (
+		f"Social follow-up is due.\n\n"
+		f"Company: {row.company_name}\n"
+		f"Channel: {row.source_channel or 'Social'}\n"
+		f"Profile: {row.source_profile_url or row.source_url or 'n/a'}\n"
+		f"Lead: {row.lead or 'n/a'}\n"
+		f"Deal: {row.deal or 'n/a'}\n"
+		f"Last contact: {row.last_contact_on or 'n/a'}\n"
+		f"Next action was due: {row.next_action_on or 'n/a'}\n\n"
+		f"Recommended next step: {row.social_next_step or 'Send follow-up DM'}\n\n"
+		f"Use the original social task and DM draft as context."
+	)
+	if task_name:
+		frappe.db.set_value(
+			"Task",
+			task_name,
+			{"description": description, "priority": "High"},
+			update_modified=True,
+		)
+		return task_name
+	doc = frappe.get_doc(
+		{
+			"doctype": "Task",
+			"subject": subject,
+			"status": "Open",
+			"priority": "High",
+			"description": description,
+			"exp_start_date": now_datetime(),
+			"exp_end_date": add_days(now_datetime(), 1),
 			"company": campaign.company,
 		}
 	)

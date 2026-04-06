@@ -15,6 +15,9 @@ frappe.ui.form.on("Remolda Campaign", {
 			frm.add_custom_button(__("DM Sent"), async () => {
 				apply_prospect_filter(frm, "dm_sent");
 			}, __("Prospect Views"));
+			frm.add_custom_button(__("Follow-Up Due"), async () => {
+				apply_prospect_filter(frm, "follow_up_due");
+			}, __("Prospect Views"));
 			frm.add_custom_button(__("Social Replied"), async () => {
 				apply_prospect_filter(frm, "social_replied");
 			}, __("Prospect Views"));
@@ -169,6 +172,7 @@ function apply_prospect_filter(frm, mode) {
 		all: __("All Prospects"),
 		queued_social: __("Queued Social"),
 		dm_sent: __("DM Sent Waiting"),
+		follow_up_due: __("Follow-Up Due"),
 		social_replied: __("Social Replied"),
 		ready_for_email: __("Ready For Email Conversion"),
 	};
@@ -188,6 +192,9 @@ function should_show_prospect_row(row, mode) {
 
 	if (mode === "queued_social") return socialStage === "Queued";
 	if (mode === "dm_sent") return socialStage === "DM Sent";
+	if (mode === "follow_up_due") {
+		return socialStage === "DM Sent" && !!row.next_action_on && new Date(row.next_action_on) <= new Date();
+	}
 	if (mode === "social_replied") return ["Replied", "Interested", "Won", "Not Interested"].includes(socialStage);
 	if (mode === "ready_for_email") return socialStage === "Decision Maker Found";
 	return true;
