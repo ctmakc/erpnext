@@ -6,6 +6,21 @@ frappe.ui.form.on("Remolda Campaign", {
 			__("One per line. Use raw URL/email or `company|url|email|phone|source channel|profile url`.")
 		);
 		if (!frm.is_new()) {
+			frm.add_custom_button(__("Show All"), async () => {
+				apply_prospect_filter(frm, "all");
+			}, __("Prospect Views"));
+			frm.add_custom_button(__("Queued Social"), async () => {
+				apply_prospect_filter(frm, "queued_social");
+			}, __("Prospect Views"));
+			frm.add_custom_button(__("DM Sent"), async () => {
+				apply_prospect_filter(frm, "dm_sent");
+			}, __("Prospect Views"));
+			frm.add_custom_button(__("Social Replied"), async () => {
+				apply_prospect_filter(frm, "social_replied");
+			}, __("Prospect Views"));
+			frm.add_custom_button(__("Ready For Email"), async () => {
+				apply_prospect_filter(frm, "ready_for_email");
+			}, __("Prospect Views"));
 			frm.add_custom_button(__("Queue Selected"), async () => {
 				await run_social_action(frm, "queue_social_outreach", __("Queueing social outreach..."));
 			}, __("Social Queue"));
@@ -131,4 +146,49 @@ function promptValues(fields, title, primaryLabel) {
 	return new Promise((resolve) => {
 		frappe.prompt(fields, (values) => resolve(values || null), title, primaryLabel);
 	});
+}
+
+function apply_prospect_filter(frm, mode) {
+	const grid = frm.fields_dict.prospects?.grid;
+	if (!grid?.grid_rows?.length) {
+		frappe.show_alert({ message: __("Prospect rows are not loaded yet."), indicator: "orange" });
+		return;
+	}
+
+	let visibleCount = 0;
+	for (const gridRow of grid.grid_rows) {
+		const row = gridRow.doc || {};
+		const show = should_show_prospect_row(row, mode);
+		if (gridRow.wrapper) {
+			gridRow.wrapper.style.display = show ? "" : "none";
+		}
+		if (show) visibleCount += 1;
+	}
+
+	const labels = {
+		all: __("All Prospects"),
+		queued_social: __("Queued Social"),
+		dm_sent: __("DM Sent Waiting"),
+		social_replied: __("Social Replied"),
+		ready_for_email: __("Ready For Email Conversion"),
+	};
+	frappe.show_alert({
+		message: __("{0}: {1} rows", [labels[mode] || __("Filtered"), visibleCount]),
+		indicator: "blue",
+	});
+}
+
+function should_show_prospect_row(row, mode) {
+	if (mode === "all") return true;
+
+	const sourceChannel = row.source_channel || "";
+	const socialStage = row.social_stage || "";
+	const isSocial = ["LinkedIn", "Facebook"].includes(sourceChannel);
+	if (!isSocial) return false;
+
+	if (mode === "queued_social") return socialStage === "Queued";
+	if (mode === "dm_sent") return socialStage === "DM Sent";
+	if (mode === "social_replied") return ["Replied", "Interested", "Won", "Not Interested"].includes(socialStage);
+	if (mode === "ready_for_email") return socialStage === "Decision Maker Found";
+	return true;
 }
