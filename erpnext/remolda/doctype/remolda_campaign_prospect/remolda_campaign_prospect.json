@@ -37,6 +37,7 @@
   "lead",
   "deal",
   "quotation",
+  "sales_order",
   "customer",
   "project",
   "support_issue",
@@ -45,6 +46,7 @@
   "research_task",
   "social_outreach_task",
   "social_follow_up_task",
+  "proposal_follow_up_task",
   "email_handoff_task",
   "social_stage",
   "social_next_step",
@@ -234,6 +236,12 @@
    "options": "Quotation"
   },
   {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order"
+  },
+  {
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
@@ -279,6 +287,12 @@
    "fieldname": "social_follow_up_task",
    "fieldtype": "Link",
    "label": "Social Follow Up Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "proposal_follow_up_task",
+   "fieldtype": "Link",
+   "label": "Proposal Follow Up Task",
    "options": "Task"
   },
   {

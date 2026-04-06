@@ -571,6 +571,13 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	def is_social_replied_row(row) -> bool:
 		return (getattr(row, "social_stage", "") or "") in {"Replied", "Interested", "Won", "Not Interested"}
 
+	def is_proposal_follow_up_due(row) -> bool:
+		return (
+			(row.status or "") == "Proposal Sent"
+			and getattr(row, "next_action_on", None)
+			and row.next_action_on <= now_datetime()
+		)
+
 	social_queue = sum(
 		1
 		for row in rows
@@ -624,6 +631,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 		and row.next_action_on <= now_datetime()
 	][:5]
 	social_replied_rows = [row for row in rows if is_social_replied_row(row)][:5]
+	proposal_follow_up_rows = [row for row in rows if is_proposal_follow_up_due(row)][:5]
 	ready_for_email_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"][:5]
 	queued_social = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"])
 	dm_sent = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"])
@@ -637,6 +645,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 		]
 	)
 	social_replied = len([row for row in rows if is_social_replied_row(row)])
+	proposal_follow_up_due = len([row for row in rows if is_proposal_follow_up_due(row)])
 	ready_for_email = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"])
 
 	return f"""
@@ -696,14 +705,14 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	      </div>
 	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
 	        {''.join(
-				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.project or 'No project')} · {html.escape(row.delivery_status or '-')} · {html.escape(row.upsell_status or '-')}</span></div>"
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.project or 'No project')} · {html.escape(getattr(row, 'sales_order', '') or 'No sales order')} · {html.escape(row.upsell_status or '-')}</span></div>"
 				for row in customer_rows
 			) or "<div style='color:#64748b;'>No won customers yet.</div>"}
 	      </div>
 	    </div>
 	  </div>
 
-	  <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;">
+	  <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;">
 	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
 	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 	        <div style="font-weight:700;">Queued Social</div>
@@ -753,6 +762,19 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'latest_response_summary', '') or 'Reply logged')} · {html.escape(getattr(row, 'social_next_step', '') or 'Review reply')}</span></div>"
 				for row in social_replied_rows
 			) or "<div style='color:#64748b;'>No social replies yet.</div>"}
+	      </div>
+	    </div>
+
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">Proposal Follow-Up Due</div>
+	        {badge(str(proposal_follow_up_due), "amber")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'proposal_follow_up_task', '') or getattr(row, 'quotation', '') or 'No artifact')} · {html.escape(getattr(row, 'proposal_subject', '') or 'Proposal sent')}</span></div>"
+				for row in proposal_follow_up_rows
+			) or "<div style='color:#64748b;'>No proposal follow-ups due.</div>"}
 	      </div>
 	    </div>
 
@@ -1578,6 +1600,10 @@ def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -
 		ensure_proposal(campaign, row, logs)
 		if campaign.auto_send_proposals and row.status != "Proposal Sent":
 			maybe_send_proposal(campaign, row, logs)
+		if row.status == "Proposal Sent" and row.next_action_on and row.next_action_on <= now_datetime():
+			row.proposal_follow_up_task = ensure_proposal_follow_up_task(row, campaign)
+			if (row.source_channel or "") in {"LinkedIn", "Facebook"}:
+				row.social_next_step = "Follow up on proposal and move to close"
 		return
 
 	if row.response_status in {"Not Interested", "Unresponsive"}:
@@ -2184,6 +2210,8 @@ def maybe_send_proposal(campaign: RemoldaCampaign, row, logs: list[str]) -> None
 	row.status = "Proposal Sent"
 	row.response_status = "Interested"
 	row.lifecycle_stage = "Proposal"
+	row.last_contact_on = now_datetime()
+	row.next_action_on = add_days(now_datetime(), int(campaign.follow_up_delay_days or 3))
 	if row.deal:
 		doc = frappe.get_doc("Opportunity", row.deal)
 		doc.sales_stage = "Audit Proposal Sent"
@@ -2358,8 +2386,50 @@ def add_sales_artifact_comment(row, artifact_type: str, artifact_name: str) -> N
 		frappe.get_doc("Opportunity", row.deal).add_comment("Comment", content)
 
 
+def ensure_proposal_follow_up_task(row, campaign: RemoldaCampaign) -> str:
+	subject = f"Follow up on proposal for {row.company_name}"
+	if getattr(row, "proposal_follow_up_task", None) and frappe.db.exists("Task", row.proposal_follow_up_task):
+		task_name = row.proposal_follow_up_task
+	else:
+		task_name = frappe.db.get_value("Task", {"subject": subject}, "name")
+	description = (
+		f"Proposal follow-up is due.\n\n"
+		f"Company: {row.company_name}\n"
+		f"Email: {row.email or 'n/a'}\n"
+		f"Lead: {row.lead or 'n/a'}\n"
+		f"Deal: {row.deal or 'n/a'}\n"
+		f"Quotation: {getattr(row, 'quotation', '') or 'n/a'}\n"
+		f"Last contact: {row.last_contact_on or 'n/a'}\n"
+		f"Next action on: {row.next_action_on or 'n/a'}\n\n"
+		f"Recommended next step: follow up on the sent proposal, answer commercial questions, and move the deal to close."
+	)
+	if task_name:
+		frappe.db.set_value(
+			"Task",
+			task_name,
+			{"description": description, "priority": "High"},
+			update_modified=True,
+		)
+		return task_name
+	doc = frappe.get_doc(
+		{
+			"doctype": "Task",
+			"subject": subject,
+			"status": "Open",
+			"priority": "High",
+			"description": description,
+			"exp_start_date": now_datetime(),
+			"exp_end_date": add_days(now_datetime(), 1),
+			"company": campaign.company,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
 def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
 	customer_name = ensure_customer(row, campaign)
+	sales_order_name = ensure_sales_order(row, campaign, customer_name)
 	project_name = ensure_project(row, campaign, customer_name)
 	onboarding_task = ensure_project_task(
 		project_name,
@@ -2384,6 +2454,7 @@ def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[st
 	support_issue = ensure_support_issue(row, campaign, customer_name, project_name)
 
 	row.customer = customer_name
+	row.sales_order = sales_order_name
 	row.project = project_name
 	row.onboarding_task = onboarding_task
 	row.qbr_task = qbr_task
@@ -2402,7 +2473,9 @@ def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[st
 		doc.probability = max(float(doc.probability or 0), 100)
 		save_doc(doc)
 
-	logs.append(f"Customer-success motion created for {row.company_name}: {customer_name}, {project_name}.")
+	logs.append(
+		f"Customer-success motion created for {row.company_name}: {customer_name}, {sales_order_name}, {project_name}."
+	)
 
 
 def ensure_customer(row, campaign: RemoldaCampaign) -> str:
@@ -2469,6 +2542,61 @@ def ensure_project(row, campaign: RemoldaCampaign, customer_name: str) -> str:
 		}
 	)
 	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def ensure_sales_order(row, campaign: RemoldaCampaign, customer_name: str) -> str:
+	if getattr(row, "sales_order", None) and frappe.db.exists("Sales Order", row.sales_order):
+		return row.sales_order
+	existing = frappe.db.get_value("Sales Order", {"customer": customer_name, "po_no": row.deal}, "name")
+	if existing:
+		return existing
+
+	service_item = ensure_remolda_service_item(campaign, row)
+	selling_price_list = get_default_selling_price_list()
+	default_currency = (
+		frappe.db.get_value("Price List", selling_price_list, "currency")
+		or frappe.db.get_value("Company", campaign.company, "default_currency")
+		or "CAD"
+	)
+	rate = get_default_offer_amount(row)
+	quotation_item = None
+	if getattr(row, "quotation", None) and frappe.db.exists("Quotation", row.quotation):
+		quotation_item = frappe.db.get_value(
+			"Quotation Item", {"parent": row.quotation, "item_code": service_item}, "name"
+		)
+
+	item_row = {
+		"item_code": service_item,
+		"item_name": campaign.service_offer,
+		"description": row.proposal_body or f"{campaign.service_offer} for {row.company_name}",
+		"qty": 1,
+		"uom": frappe.db.get_value("Item", service_item, "stock_uom") or "Nos",
+		"delivery_date": add_days(now_datetime().date(), 14),
+		"rate": rate,
+	}
+	if getattr(row, "quotation", None):
+		item_row["prevdoc_docname"] = row.quotation
+	if quotation_item:
+		item_row["quotation_item"] = quotation_item
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Sales Order",
+			"customer": customer_name,
+			"company": campaign.company,
+			"transaction_date": now_datetime().date(),
+			"delivery_date": add_days(now_datetime().date(), 14),
+			"order_type": "Sales",
+			"territory": pick_territory(campaign),
+			"currency": default_currency,
+			"selling_price_list": selling_price_list,
+			"po_no": row.deal or f"Remolda-{row.company_name}",
+			"items": [item_row],
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	add_sales_artifact_comment(row, "Sales Order", doc.name)
 	return doc.name
 
 

@@ -130,3 +130,7 @@ def test_build_social_outreach_body_mentions_profile():
 
 def test_service_item_code_normalizes_offer_name():
 	assert service_item_code("HVAC AI Workflow Audit") == "REM-HVAC-AI-WORKFLOW-AUDIT"
+
+
+def test_service_item_code_handles_empty_offer():
+	assert service_item_code("") == "REM-REMOLDA-SERVICE"
