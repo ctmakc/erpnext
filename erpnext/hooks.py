@@ -448,7 +448,9 @@ scheduler_events = {
 	"hourly": [
 		"erpnext.projects.doctype.project.project.hourly_reminder",
 	],
-	"hourly_long": [],
+	"hourly_long": [
+		"erpnext.remolda.doctype.remolda_campaign.remolda_campaign.run_remolda_automation",
+	],
 	"hourly_maintenance": [
 		"erpnext.stock.doctype.repost_item_valuation.repost_item_valuation.repost_entries",
 		"erpnext.utilities.bulk_transaction.retry",

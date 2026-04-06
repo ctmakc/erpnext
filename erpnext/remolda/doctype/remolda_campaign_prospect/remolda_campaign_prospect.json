@@ -1,0 +1,313 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-04-06 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company_name",
+  "status",
+  "lifecycle_stage",
+  "response_status",
+  "email_status",
+  "icp_score",
+  "priority_tier",
+  "service_fit",
+  "contact_gap_status",
+  "delivery_status",
+  "support_status",
+  "upsell_status",
+  "outreach_attempts",
+  "last_contact_on",
+  "next_action_on",
+  "website",
+  "email",
+  "phone",
+  "location",
+  "source_channel",
+  "source_query",
+  "source_url",
+  "source_profile_url",
+  "summary",
+  "personalization_notes",
+  "pain_hypothesis",
+  "outreach_subject",
+  "outreach_body",
+  "lead",
+  "deal",
+  "customer",
+  "project",
+  "support_issue",
+  "onboarding_task",
+  "qbr_task",
+  "research_task",
+  "social_outreach_task",
+  "upsell_deal",
+  "last_error",
+  "latest_response_summary",
+  "social_outreach_body",
+  "proposal_subject",
+  "proposal_body"
+ ],
+ "fields": [
+  {
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Company Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Discovered\nDrafted\nLead Created\nDeal Created\nReady To Send\nSent\nProposal Drafted\nProposal Sent\nReplied\nInterested\nWon\nCustomer Live\nUpsell Opened\nNot Interested\nUnresponsive\nNo Email Found\nSkipped\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "label": "Lifecycle Stage",
+   "options": "Discovered\nLead\nDeal\nOutreach\nFollow Up\nProposal\nWon\nLost"
+  },
+  {
+   "fieldname": "response_status",
+   "fieldtype": "Select",
+   "label": "Response Status",
+   "options": "Awaiting Outreach\nReady To Send\nSent\nReplied\nInterested\nWon\nNot Interested\nUnresponsive\nNo Email Found\nBlocked - No Outgoing Email"
+  },
+  {
+   "fieldname": "email_status",
+   "fieldtype": "Select",
+   "label": "Email Status",
+   "options": "Unknown\nValid\nInvalid\nPlaceholder"
+  },
+  {
+   "default": "0",
+   "fieldname": "icp_score",
+   "fieldtype": "Int",
+   "label": "ICP Score"
+  },
+  {
+   "fieldname": "priority_tier",
+   "fieldtype": "Select",
+   "label": "Priority Tier",
+   "options": "A\nB\nC"
+  },
+  {
+   "fieldname": "service_fit",
+   "fieldtype": "Data",
+   "label": "Service Fit"
+  },
+  {
+   "fieldname": "contact_gap_status",
+   "fieldtype": "Select",
+   "label": "Contact Gap Status",
+   "options": "Ready\nNeeds Email\nNeeds Decision Maker\nNeeds Research"
+  },
+  {
+   "fieldname": "delivery_status",
+   "fieldtype": "Select",
+   "label": "Delivery Status",
+   "options": "Not Started\nProgram Created\nAudit Active\nStrategy Active\nImplementation Active\nEmpower Active\nEvolve Active\nCompleted"
+  },
+  {
+   "fieldname": "support_status",
+   "fieldtype": "Select",
+   "label": "Support Status",
+   "options": "Not Started\nSupport Desk Open\nMonitoring\nExpansion Signal"
+  },
+  {
+   "fieldname": "upsell_status",
+   "fieldtype": "Select",
+   "label": "Upsell Status",
+   "options": "None\nMonitoring\nTriggered\nDeal Opened\nClosed Won\nClosed Lost"
+  },
+  {
+   "default": "0",
+   "fieldname": "outreach_attempts",
+   "fieldtype": "Int",
+   "label": "Outreach Attempts"
+  },
+  {
+   "fieldname": "last_contact_on",
+   "fieldtype": "Datetime",
+   "label": "Last Contact On"
+  },
+  {
+   "fieldname": "next_action_on",
+   "fieldtype": "Datetime",
+   "label": "Next Action On"
+  },
+  {
+   "fieldname": "website",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Website"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Location"
+  },
+  {
+   "fieldname": "source_channel",
+   "fieldtype": "Select",
+   "label": "Source Channel",
+   "options": "Web Search\nLinkedIn\nFacebook\nDirectory\nReferral\nCSV Import\nManual Seed"
+  },
+  {
+   "fieldname": "source_query",
+   "fieldtype": "Data",
+   "label": "Source Query"
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Small Text",
+   "label": "Source URL"
+  },
+  {
+   "fieldname": "source_profile_url",
+   "fieldtype": "Small Text",
+   "label": "Source Profile URL"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "personalization_notes",
+   "fieldtype": "Small Text",
+   "label": "Personalization Notes"
+  },
+  {
+   "fieldname": "pain_hypothesis",
+   "fieldtype": "Small Text",
+   "label": "Pain Hypothesis"
+  },
+  {
+   "fieldname": "outreach_subject",
+   "fieldtype": "Data",
+   "label": "Outreach Subject"
+  },
+  {
+   "fieldname": "outreach_body",
+   "fieldtype": "Long Text",
+   "label": "Outreach Body"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "Lead"
+  },
+  {
+   "fieldname": "deal",
+   "fieldtype": "Link",
+   "label": "Deal",
+   "options": "Opportunity"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "support_issue",
+   "fieldtype": "Link",
+   "label": "Support Issue",
+   "options": "Issue"
+  },
+  {
+   "fieldname": "onboarding_task",
+   "fieldtype": "Link",
+   "label": "Onboarding Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "qbr_task",
+   "fieldtype": "Link",
+   "label": "QBR Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "research_task",
+   "fieldtype": "Link",
+   "label": "Research Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "social_outreach_task",
+   "fieldtype": "Link",
+   "label": "Social Outreach Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "upsell_deal",
+   "fieldtype": "Link",
+   "label": "Upsell Deal",
+   "options": "Opportunity"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error"
+  },
+  {
+   "fieldname": "latest_response_summary",
+   "fieldtype": "Small Text",
+   "label": "Latest Response Summary"
+  },
+  {
+   "fieldname": "social_outreach_body",
+   "fieldtype": "Long Text",
+   "label": "Social Outreach Body"
+  },
+  {
+   "fieldname": "proposal_subject",
+   "fieldtype": "Data",
+   "label": "Proposal Subject"
+  },
+  {
+   "fieldname": "proposal_body",
+   "fieldtype": "Long Text",
+   "label": "Proposal Body"
+  }
+ ],
+ "idx": 1,
+ "in_create": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Remolda",
+ "name": "Remolda Campaign Prospect",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": []
+}

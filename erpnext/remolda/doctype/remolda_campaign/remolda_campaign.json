@@ -1,0 +1,310 @@
+{
+ "actions": [],
+ "autoname": "format:REM-CAMP-{YYYY}-{#####}",
+ "creation": "2026-04-06 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "campaign_name",
+  "status",
+  "column_break_top",
+  "company",
+  "service_offer",
+  "search_section",
+  "target_city",
+  "target_region",
+  "target_country",
+  "column_break_search",
+  "search_terms",
+  "seed_prospects",
+  "max_results",
+  "auto_run",
+  "run_frequency_hours",
+  "automation_section",
+  "auto_create_leads",
+  "auto_create_deals",
+  "auto_send_outreach",
+  "enable_follow_ups",
+  "follow_up_delay_days",
+  "max_follow_ups",
+  "classify_responses",
+  "auto_send_proposals",
+  "dry_run",
+  "column_break_automation",
+  "sender_email",
+  "ollama_model",
+  "ollama_base_url",
+  "last_run_on",
+  "last_automation_on",
+  "operator_console_section",
+  "operator_snapshot",
+  "results_section",
+  "generated_count",
+  "run_log",
+  "prospects"
+ ],
+ "fields": [
+  {
+   "fieldname": "campaign_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Campaign Name",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nRunning\nCompleted\nFailed",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_top",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "default": "HVAC AI Workflow Audit",
+   "fieldname": "service_offer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Service Offer",
+   "options": "Opportunity Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "search_section",
+   "fieldtype": "Section Break",
+   "label": "Search Scope"
+  },
+  {
+   "default": "Ottawa",
+   "fieldname": "target_city",
+   "fieldtype": "Data",
+   "label": "Target City",
+   "reqd": 1
+  },
+  {
+   "default": "Ontario",
+   "fieldname": "target_region",
+   "fieldtype": "Data",
+   "label": "Target Region"
+  },
+  {
+   "default": "Canada",
+   "fieldname": "target_country",
+   "fieldtype": "Data",
+   "label": "Target Country"
+  },
+  {
+   "fieldname": "column_break_search",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "HVAC contractor\nheating and cooling\nair conditioning repair",
+   "fieldname": "search_terms",
+   "fieldtype": "Long Text",
+   "label": "Search Terms",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seed_prospects",
+   "fieldtype": "Long Text",
+   "label": "Seed Prospects",
+   "description": "One per line. Supports raw URL, email, or pipe format: company|url|email|phone|source channel"
+  },
+  {
+   "default": "5",
+   "fieldname": "max_results",
+   "fieldtype": "Int",
+   "label": "Max Prospects",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_run",
+   "fieldtype": "Check",
+   "label": "Auto Run"
+  },
+  {
+   "default": "24",
+   "depends_on": "auto_run",
+   "fieldname": "run_frequency_hours",
+   "fieldtype": "Int",
+   "label": "Run Frequency Hours"
+  },
+  {
+   "fieldname": "automation_section",
+   "fieldtype": "Section Break",
+   "label": "Automation"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_create_leads",
+   "fieldtype": "Check",
+   "label": "Auto Create Leads"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_create_deals",
+   "fieldtype": "Check",
+   "label": "Auto Create Deals"
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_send_outreach",
+   "fieldtype": "Check",
+   "label": "Auto Send Outreach"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_follow_ups",
+   "fieldtype": "Check",
+   "label": "Enable Follow Ups"
+  },
+  {
+   "default": "3",
+   "fieldname": "follow_up_delay_days",
+   "fieldtype": "Int",
+   "label": "Follow Up Delay Days"
+  },
+  {
+   "default": "2",
+   "fieldname": "max_follow_ups",
+   "fieldtype": "Int",
+   "label": "Max Follow Ups"
+  },
+  {
+   "default": "1",
+   "fieldname": "classify_responses",
+   "fieldtype": "Check",
+   "label": "Classify Responses"
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_send_proposals",
+   "fieldtype": "Check",
+   "label": "Auto Send Proposals"
+  },
+  {
+   "default": "1",
+   "fieldname": "dry_run",
+   "fieldtype": "Check",
+   "label": "Dry Run"
+  },
+  {
+   "fieldname": "column_break_automation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sender_email",
+   "fieldtype": "Data",
+   "label": "Sender Email",
+   "options": "Email"
+  },
+  {
+   "default": "qwen2.5:14b",
+   "fieldname": "ollama_model",
+   "fieldtype": "Data",
+   "label": "Ollama Model"
+  },
+  {
+   "default": "http://172.17.0.1:11434",
+   "fieldname": "ollama_base_url",
+   "fieldtype": "Data",
+   "label": "Ollama Base URL"
+  },
+  {
+   "fieldname": "last_run_on",
+   "fieldtype": "Datetime",
+   "label": "Last Run On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_automation_on",
+   "fieldtype": "Datetime",
+   "label": "Last Automation On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operator_console_section",
+   "fieldtype": "Section Break",
+   "label": "Operator Console"
+  },
+  {
+   "fieldname": "operator_snapshot",
+   "fieldtype": "HTML",
+   "label": "Operator Snapshot"
+  },
+  {
+   "fieldname": "results_section",
+   "fieldtype": "Section Break",
+   "label": "Results"
+  },
+  {
+   "default": "0",
+   "fieldname": "generated_count",
+   "fieldtype": "Int",
+   "label": "Generated Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "run_log",
+   "fieldtype": "Long Text",
+   "label": "Run Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prospects",
+   "fieldtype": "Table",
+   "label": "Prospects",
+   "options": "Remolda Campaign Prospect"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-04-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Remolda",
+ "name": "Remolda Campaign",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "campaign_name",
+ "track_changes": 1
+}
