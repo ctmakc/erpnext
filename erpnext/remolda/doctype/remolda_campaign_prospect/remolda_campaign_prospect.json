@@ -19,6 +19,7 @@
   "support_status",
   "upsell_status",
   "outreach_attempts",
+  "proposal_follow_up_attempts",
   "last_contact_on",
   "next_action_on",
   "website",
@@ -137,6 +138,12 @@
    "fieldname": "outreach_attempts",
    "fieldtype": "Int",
    "label": "Outreach Attempts"
+  },
+  {
+   "default": "0",
+   "fieldname": "proposal_follow_up_attempts",
+   "fieldtype": "Int",
+   "label": "Proposal Follow Up Attempts"
   },
   {
    "fieldname": "last_contact_on",

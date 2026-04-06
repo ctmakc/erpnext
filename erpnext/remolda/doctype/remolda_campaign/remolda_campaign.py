@@ -1602,6 +1602,8 @@ def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -
 			maybe_send_proposal(campaign, row, logs)
 		if row.status == "Proposal Sent" and row.next_action_on and row.next_action_on <= now_datetime():
 			row.proposal_follow_up_task = ensure_proposal_follow_up_task(row, campaign)
+			if campaign.auto_send_proposals:
+				maybe_send_proposal_follow_up(campaign, row, logs)
 			if (row.source_channel or "") in {"LinkedIn", "Facebook"}:
 				row.social_next_step = "Follow up on proposal and move to close"
 		return
@@ -2218,6 +2220,82 @@ def maybe_send_proposal(campaign: RemoldaCampaign, row, logs: list[str]) -> None
 		doc.probability = max(float(doc.probability or 0), 65)
 		save_doc(doc)
 	logs.append(f"Proposal sent to {row.company_name}.")
+
+
+def maybe_send_proposal_follow_up(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
+	if not row.email or (row.status or "") != "Proposal Sent":
+		return
+	attempt = int(getattr(row, "proposal_follow_up_attempts", 0) or 0)
+	if attempt >= int(campaign.max_follow_ups or 0):
+		return
+	subject, body = generate_proposal_follow_up(campaign, row, attempt + 1)
+	if not subject or not body:
+		return
+	if not get_outgoing_sender(campaign):
+		row.last_error = "No default outgoing Email Account configured for proposal follow-up."
+		return
+	try:
+		dispatch_email(campaign, row, subject, body, logs)
+	except Exception:
+		row.last_error = frappe.get_traceback()
+		logs.append(f"Proposal follow-up failed for {row.company_name}: {row.last_error}")
+		return
+	row.proposal_follow_up_attempts = attempt + 1
+	row.last_contact_on = now_datetime()
+	row.next_action_on = add_days(now_datetime(), int(campaign.follow_up_delay_days or 3))
+	row.social_next_step = "Proposal follow-up sent, wait for reply"
+	logs.append(f"Proposal follow-up {row.proposal_follow_up_attempts} sent to {row.company_name}.")
+
+
+def generate_proposal_follow_up(campaign: RemoldaCampaign, row, stage: int) -> tuple[str, str]:
+	try:
+		return generate_proposal_follow_up_with_ollama(campaign, row, stage)
+	except Exception:
+		subject = f"Following up on the HVAC AI Workflow Audit proposal for {row.company_name}"
+		body = (
+			f"Hi {row.company_name} team,\n\n"
+			f"I wanted to follow up on the HVAC AI Workflow Audit proposal I sent over. "
+			f"The main outcome is a clear implementation roadmap around dispatching, quoting, intake, and follow-up workflows.\n\n"
+			f"If it helps, I can answer any scope or pricing questions and suggest the fastest kickoff path.\n\n"
+			f"Best,\nRemolda"
+		)
+		return truncate(subject, 140), body
+
+
+def generate_proposal_follow_up_with_ollama(
+	campaign: RemoldaCampaign, row, stage: int
+) -> tuple[str, str]:
+	prompt = f"""
+Write follow-up email #{stage} for a sent HVAC AI Workflow Audit proposal.
+
+Company:
+- Name: {row.company_name}
+- Website: {row.website}
+- Proposal subject: {row.proposal_subject}
+- Latest response summary: {row.latest_response_summary or 'No reply yet'}
+
+Constraints:
+- concise
+- professional
+- 90 to 150 words
+- mention the proposal and offer to answer scope/pricing questions
+- ask for a short reply or call
+
+Return strict JSON with keys: subject, body
+""".strip()
+	response = requests.post(
+		f"{(campaign.ollama_base_url or 'http://172.17.0.1:11434').rstrip('/')}/api/generate",
+		json={
+			"model": campaign.ollama_model or "qwen2.5:14b",
+			"prompt": prompt,
+			"stream": False,
+			"format": "json",
+		},
+		timeout=120,
+	)
+	response.raise_for_status()
+	data = json.loads(response.json().get("response", "{}"))
+	return truncate(data.get("subject", ""), 140), data.get("body", "").strip()
 
 
 def ensure_sales_quotation(campaign: RemoldaCampaign, row) -> str | None:

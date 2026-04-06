@@ -12,6 +12,7 @@ from erpnext.remolda.doctype.remolda_campaign.remolda_campaign import (
 	parse_seed_line,
 	resolve_duckduckgo_url,
 	service_item_code,
+	generate_proposal_follow_up,
 )
 
 
@@ -134,3 +135,19 @@ def test_service_item_code_normalizes_offer_name():
 
 def test_service_item_code_handles_empty_offer():
 	assert service_item_code("") == "REM-REMOLDA-SERVICE"
+
+
+def test_generate_proposal_follow_up_fallback_mentions_scope_or_pricing():
+	class Campaign:
+		ollama_base_url = "http://127.0.0.1:9"
+		ollama_model = "none"
+
+	class Row:
+		company_name = "Coolairhvac"
+		website = "https://coolairhvac.example"
+		proposal_subject = "HVAC AI Workflow Audit Proposal"
+		latest_response_summary = ""
+
+	subject, body = generate_proposal_follow_up(Campaign(), Row(), 1)
+	assert "Coolairhvac" in subject
+	assert "scope" in body.lower() or "pricing" in body.lower()
