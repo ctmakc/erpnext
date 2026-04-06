@@ -36,6 +36,7 @@
   "outreach_body",
   "lead",
   "deal",
+  "quotation",
   "customer",
   "project",
   "support_issue",
@@ -44,6 +45,7 @@
   "research_task",
   "social_outreach_task",
   "social_follow_up_task",
+  "email_handoff_task",
   "social_stage",
   "social_next_step",
   "upsell_deal",
@@ -226,6 +228,12 @@
    "options": "Opportunity"
   },
   {
+   "fieldname": "quotation",
+   "fieldtype": "Link",
+   "label": "Quotation",
+   "options": "Quotation"
+  },
+  {
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
@@ -271,6 +279,12 @@
    "fieldname": "social_follow_up_task",
    "fieldtype": "Link",
    "label": "Social Follow Up Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "email_handoff_task",
+   "fieldtype": "Link",
+   "label": "Email Handoff Task",
    "options": "Task"
   },
   {

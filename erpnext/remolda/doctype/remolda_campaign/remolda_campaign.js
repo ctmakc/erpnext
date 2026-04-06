@@ -33,6 +33,12 @@ frappe.ui.form.on("Remolda Campaign", {
 			frm.add_custom_button(__("Mark Not Interested"), async () => {
 				await run_social_action(frm, "mark_social_not_interested", __("Marking prospects as not interested..."));
 			}, __("Social Queue"));
+			frm.add_custom_button(__("Prepare Email Handoff"), async () => {
+				await run_social_action(frm, "prepare_email_handoff", __("Preparing email handoff..."));
+			}, __("Social Queue"));
+			frm.add_custom_button(__("Send Email Now"), async () => {
+				await run_social_action(frm, "send_email_now", __("Sending email outreach..."));
+			}, __("Social Queue"));
 			frm.add_custom_button(__("Decision Maker Found"), async () => {
 				const selected = get_selected_prospect_rows(frm);
 				if (selected.length !== 1) {

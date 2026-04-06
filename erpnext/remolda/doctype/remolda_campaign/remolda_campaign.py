@@ -428,7 +428,7 @@ def mark_decision_maker_found(
 	row.email_status = classify_email_status(row.email)
 	row.last_error = ""
 	row.social_stage = "Decision Maker Found"
-	row.social_next_step = "Move into email outreach"
+	row.social_next_step = "Prepare or send email outreach"
 	if row.response_status in {"No Email Found", "", None}:
 		row.response_status = "Ready To Send" if doc.auto_send_outreach else "Awaiting Outreach"
 	if row.status in {"No Email Found", "Failed", "", None}:
@@ -437,8 +437,75 @@ def mark_decision_maker_found(
 		row.personalization_notes = (
 			((row.personalization_notes or "").strip() + " | ") if row.personalization_notes else ""
 		) + f"Decision maker found: {contact_name}"
+	row.email_handoff_task = ensure_email_handoff(doc, row)
 	logs = [f"Decision maker found for {row.company_name}: {row.email}."]
 	return finalize_campaign_action(doc, logs, 1)
+
+
+@frappe.whitelist()
+def prepare_email_handoff(name: str, row_names: list[str] | str) -> dict[str, Any]:
+	doc = frappe.get_doc("Remolda Campaign", name)
+	rows = get_prospect_rows(doc, row_names)
+	logs: list[str] = []
+	count = 0
+	for row in rows:
+		if not row.email:
+			continue
+		row.email_handoff_task = ensure_email_handoff(doc, row)
+		row.social_stage = row.social_stage or "Decision Maker Found"
+		row.social_next_step = "Review or send email outreach"
+		if row.response_status in {"No Email Found", "", None}:
+			row.response_status = "Ready To Send" if doc.auto_send_outreach else "Awaiting Outreach"
+		if row.status in {"No Email Found", "Failed", "", None}:
+			row.status = "Drafted"
+		logs.append(f"Prepared email handoff for {row.company_name}.")
+		count += 1
+	return finalize_campaign_action(doc, logs, count)
+
+
+@frappe.whitelist()
+def send_email_now(name: str, row_names: list[str] | str) -> dict[str, Any]:
+	doc = frappe.get_doc("Remolda Campaign", name)
+	rows = get_prospect_rows(doc, row_names)
+	logs: list[str] = []
+	count = 0
+	for row in rows:
+		if not row.email:
+			continue
+		if not row.outreach_subject or not row.outreach_body:
+			candidate = ProspectCandidate(
+				company_name=row.company_name,
+				website=row.website or "",
+				source_url=row.source_url or row.website or "",
+				source_query=row.source_query or "",
+				source_channel=row.source_channel or "Manual Seed",
+				source_profile_url=row.source_profile_url or "",
+				location=row.location or doc.target_city,
+				email=row.email or "",
+				phone=row.phone or "",
+				summary=row.summary or "",
+				personalization_notes=row.personalization_notes or "",
+				pain_hypothesis=row.pain_hypothesis or "",
+			)
+			draft = draft_outreach(candidate, doc)
+			row.outreach_subject = draft.get("subject", "")
+			row.outreach_body = draft.get("body", "")
+			row.personalization_notes = draft.get("personalization_notes", "") or row.personalization_notes
+			row.pain_hypothesis = draft.get("pain_hypothesis", "") or row.pain_hypothesis
+		dispatch_email(doc, row, row.outreach_subject, row.outreach_body, logs)
+		row.outreach_attempts = int(row.outreach_attempts or 0) + 1
+		row.last_contact_on = now_datetime()
+		row.next_action_on = add_days(now_datetime(), int(doc.follow_up_delay_days or 3))
+		row.response_status = "Sent"
+		row.status = "Sent"
+		row.lifecycle_stage = "Outreach"
+		if (row.source_channel or "") in {"LinkedIn", "Facebook"}:
+			row.social_stage = "DM Sent"
+			row.social_next_step = "Wait for reply or identify decision maker email"
+		update_deal_after_touch(row)
+		count += 1
+		logs.append(f"Sent email outreach immediately to {row.company_name} <{row.email}>.")
+	return finalize_campaign_action(doc, logs, count)
 
 
 @frappe.whitelist()
@@ -493,11 +560,21 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	won = sum(1 for row in rows if (row.response_status or "") == "Won")
 	customer_live = sum(1 for row in rows if (row.status or "") in {"Customer Live", "Upsell Opened"})
 	upsell_open = sum(1 for row in rows if getattr(row, "upsell_deal", None))
+
+	def is_social_queue_row(row) -> bool:
+		return (
+			(row.source_channel or "") in {"LinkedIn", "Facebook"}
+			and (getattr(row, "social_outreach_task", None) or getattr(row, "research_task", None))
+			and (getattr(row, "social_stage", "") or "") in {"Queued", "DM Sent", "Decision Maker Found"}
+		)
+
+	def is_social_replied_row(row) -> bool:
+		return (getattr(row, "social_stage", "") or "") in {"Replied", "Interested", "Won", "Not Interested"}
+
 	social_queue = sum(
 		1
 		for row in rows
-		if (row.source_channel or "") in {"LinkedIn", "Facebook"}
-		and (getattr(row, "social_outreach_task", None) or getattr(row, "research_task", None))
+		if is_social_queue_row(row)
 	)
 
 	def badge(text: str, tone: str) -> str:
@@ -535,8 +612,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	social_rows = [
 		row
 		for row in rows
-		if (row.source_channel or "") in {"LinkedIn", "Facebook"}
-		and (getattr(row, "social_outreach_task", None) or getattr(row, "research_task", None))
+		if is_social_queue_row(row)
 	][:5]
 	queued_social_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"][:5]
 	dm_sent_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"][:5]
@@ -547,7 +623,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 		and getattr(row, "next_action_on", None)
 		and row.next_action_on <= now_datetime()
 	][:5]
-	social_replied_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"][:5]
+	social_replied_rows = [row for row in rows if is_social_replied_row(row)][:5]
 	ready_for_email_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"][:5]
 	queued_social = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"])
 	dm_sent = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"])
@@ -560,7 +636,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 			and row.next_action_on <= now_datetime()
 		]
 	)
-	social_replied = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"])
+	social_replied = len([row for row in rows if is_social_replied_row(row)])
 	ready_for_email = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"])
 
 	return f"""
@@ -687,7 +763,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	      </div>
 	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
 	        {''.join(
-				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.email or 'No email')} · {html.escape(getattr(row, 'social_next_step', '') or 'Move into email outreach')}</span></div>"
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'email_handoff_task', '') or row.email or 'No email')} · {html.escape(getattr(row, 'social_next_step', '') or 'Move into email outreach')}</span></div>"
 				for row in ready_for_email_rows
 			) or "<div style='color:#64748b;'>No social prospects ready for email conversion.</div>"}
 	      </div>
@@ -2012,19 +2088,26 @@ Interested, Won, Not Interested, Replied
 
 
 def ensure_proposal(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
-	if row.proposal_body:
-		return
-	subject, body = generate_proposal(campaign, row)
-	row.proposal_subject = subject
-	row.proposal_body = body
-	row.status = "Proposal Drafted"
-	row.lifecycle_stage = "Proposal"
+	proposal_created = False
+	if not row.proposal_body:
+		subject, body = generate_proposal(campaign, row)
+		row.proposal_subject = subject
+		row.proposal_body = body
+		row.status = "Proposal Drafted"
+		row.lifecycle_stage = "Proposal"
+		proposal_created = True
+	quotation_name = ensure_sales_quotation(campaign, row)
+	if quotation_name:
+		row.quotation = quotation_name
 	if row.deal:
 		doc = frappe.get_doc("Opportunity", row.deal)
 		doc.sales_stage = "Audit Scoped"
 		doc.probability = max(float(doc.probability or 0), 55)
 		save_doc(doc)
-	logs.append(f"Proposal drafted for {row.company_name}.")
+	if proposal_created:
+		logs.append(f"Proposal drafted for {row.company_name}.")
+	if quotation_name:
+		logs.append(f"Quotation {quotation_name} is linked to {row.company_name}.")
 
 
 def generate_proposal(campaign: RemoldaCampaign, row) -> tuple[str, str]:
@@ -2085,6 +2168,8 @@ def maybe_send_proposal(campaign: RemoldaCampaign, row, logs: list[str]) -> None
 		return
 	if row.status == "Proposal Sent":
 		return
+	if not row.quotation:
+		row.quotation = ensure_sales_quotation(campaign, row)
 	if not get_outgoing_sender(campaign):
 		row.response_status = "Blocked - No Outgoing Email"
 		row.last_error = "No default outgoing Email Account configured for proposal send."
@@ -2105,6 +2190,172 @@ def maybe_send_proposal(campaign: RemoldaCampaign, row, logs: list[str]) -> None
 		doc.probability = max(float(doc.probability or 0), 65)
 		save_doc(doc)
 	logs.append(f"Proposal sent to {row.company_name}.")
+
+
+def ensure_sales_quotation(campaign: RemoldaCampaign, row) -> str | None:
+	if getattr(row, "quotation", None) and frappe.db.exists("Quotation", row.quotation):
+		return row.quotation
+	if row.deal:
+		existing_rows = frappe.get_all(
+			"Quotation",
+			filters={"opportunity": row.deal, "docstatus": ["!=", 2]},
+			pluck="name",
+			limit=1,
+		)
+		existing = existing_rows[0] if existing_rows else None
+		if existing:
+			return existing
+
+	party_type, party_name = get_quotation_party(row)
+	if not party_name:
+		return None
+
+	service_item = ensure_remolda_service_item(campaign, row)
+	selling_price_list = get_default_selling_price_list()
+	default_currency = (
+		frappe.db.get_value("Price List", selling_price_list, "currency")
+		or frappe.db.get_value("Company", campaign.company, "default_currency")
+		or "CAD"
+	)
+	rate = get_default_offer_amount(row)
+	quotation = frappe.get_doc(
+		{
+			"doctype": "Quotation",
+			"quotation_to": party_type,
+			"party_name": party_name,
+			"company": campaign.company,
+			"transaction_date": now_datetime().date(),
+			"valid_till": add_days(now_datetime().date(), 14),
+			"order_type": "Sales",
+			"territory": pick_territory(campaign),
+			"currency": default_currency,
+			"selling_price_list": selling_price_list,
+			"opportunity": row.deal,
+			"contact_email": row.email,
+			"contact_mobile": row.phone,
+			"terms": row.proposal_body or "",
+			"items": [
+				{
+					"item_code": service_item,
+					"item_name": campaign.service_offer,
+					"description": row.proposal_body or f"{campaign.service_offer} for {row.company_name}",
+					"qty": 1,
+					"uom": frappe.db.get_value("Item", service_item, "stock_uom") or "Nos",
+					"conversion_factor": 1,
+					"rate": rate,
+				}
+			],
+		}
+	)
+	quotation.insert(ignore_permissions=True)
+	add_sales_artifact_comment(row, "Quotation", quotation.name)
+	return quotation.name
+
+
+def get_quotation_party(row) -> tuple[str, str | None]:
+	if row.customer:
+		return "Customer", row.customer
+	if row.lead:
+		return "Lead", row.lead
+	return "Lead", None
+
+
+def service_item_code(service_offer: str) -> str:
+	slug = re.sub(r"[^A-Z0-9]+", "-", (service_offer or "REMOLDA SERVICE").upper()).strip("-")
+	slug = slug[:32] or "REMOLDA-SERVICE"
+	return f"REM-{slug}"
+
+
+def ensure_remolda_service_item(campaign: RemoldaCampaign, row) -> str:
+	item_code = service_item_code(campaign.service_offer or "Remolda Service")
+	if frappe.db.exists("Item", item_code):
+		ensure_item_price(item_code, get_default_selling_price_list(), get_default_offer_amount(row))
+		return item_code
+
+	existing = frappe.db.get_value("Item", {"item_name": campaign.service_offer}, "name")
+	if existing:
+		ensure_item_price(existing, get_default_selling_price_list(), get_default_offer_amount(row))
+		return existing
+
+	item_group = (
+		frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+		or frappe.db.get_value("Item Group", {}, "name")
+		or "All Item Groups"
+	)
+	uom = frappe.db.get_value("UOM", {"enabled": 1}, "name") or frappe.db.get_value("UOM", {}, "name") or "Nos"
+	item = frappe.get_doc(
+		{
+			"doctype": "Item",
+			"item_code": item_code,
+			"item_name": campaign.service_offer,
+			"description": f"Remolda offer: {campaign.service_offer}",
+			"item_group": item_group,
+			"stock_uom": uom,
+			"is_stock_item": 0,
+			"is_sales_item": 1,
+			"include_item_in_manufacturing": 0,
+			"standard_rate": get_default_offer_amount(row),
+		}
+	)
+	item.insert(ignore_permissions=True)
+	ensure_item_price(item.name, get_default_selling_price_list(), get_default_offer_amount(row))
+	return item.name
+
+
+def get_default_selling_price_list() -> str:
+	return (
+		frappe.db.get_value("Price List", {"selling": 1, "enabled": 1}, "name")
+		or frappe.db.get_value("Price List", {"selling": 1}, "name")
+		or "Standard Selling"
+	)
+
+
+def get_default_offer_amount(row) -> float:
+	if row.deal and frappe.db.exists("Opportunity", row.deal):
+		return float(frappe.db.get_value("Opportunity", row.deal, "opportunity_amount") or 2500)
+	return 2500.0
+
+
+def ensure_item_price(item_code: str, price_list: str, rate: float) -> None:
+	if not item_code or not price_list:
+		return
+	existing = frappe.db.get_value(
+		"Item Price",
+		{"item_code": item_code, "price_list": price_list, "selling": 1},
+		"name",
+	)
+	currency = frappe.db.get_value("Price List", price_list, "currency") or "CAD"
+	if existing:
+		frappe.db.set_value(
+			"Item Price",
+			existing,
+			{"price_list_rate": rate, "currency": currency},
+			update_modified=True,
+		)
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Item Price",
+			"item_code": item_code,
+			"price_list": price_list,
+			"price_list_rate": rate,
+			"currency": currency,
+			"selling": 1,
+		}
+	).insert(ignore_permissions=True)
+
+
+def add_sales_artifact_comment(row, artifact_type: str, artifact_name: str) -> None:
+	content = (
+		f"<b>Remolda {html.escape(artifact_type)}</b><br><br>"
+		f"<b>Reference:</b> {html.escape(artifact_name)}<br>"
+		f"<b>Company:</b> {html.escape(row.company_name or '')}<br>"
+		f"<b>Status:</b> {html.escape(row.status or row.response_status or '-')}"
+	)
+	if row.lead:
+		frappe.get_doc("Lead", row.lead).add_comment("Comment", content)
+	if row.deal:
+		frappe.get_doc("Opportunity", row.deal).add_comment("Comment", content)
 
 
 def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
@@ -2389,6 +2640,61 @@ def ensure_social_follow_up_task(row, campaign: RemoldaCampaign) -> str:
 			{"description": description, "priority": "High"},
 			update_modified=True,
 		)
+		return task_name
+	doc = frappe.get_doc(
+		{
+			"doctype": "Task",
+			"subject": subject,
+			"status": "Open",
+			"priority": "High",
+			"description": description,
+			"exp_start_date": now_datetime(),
+			"exp_end_date": add_days(now_datetime(), 1),
+			"company": campaign.company,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def ensure_email_handoff(campaign: RemoldaCampaign, row) -> str:
+	subject = f"Launch email outreach to {row.company_name}"
+	task_name = getattr(row, "email_handoff_task", None) if getattr(row, "email_handoff_task", None) and frappe.db.exists("Task", row.email_handoff_task) else None
+	if not task_name:
+		task_name = frappe.db.get_value("Task", {"subject": subject}, "name")
+	if not row.outreach_subject or not row.outreach_body:
+		candidate = ProspectCandidate(
+			company_name=row.company_name,
+			website=row.website or "",
+			source_url=row.source_url or row.website or "",
+			source_query=row.source_query or "",
+			source_channel=row.source_channel or "Manual Seed",
+			source_profile_url=row.source_profile_url or "",
+			location=row.location or campaign.target_city,
+			email=row.email or "",
+			phone=row.phone or "",
+			summary=row.summary or "",
+			personalization_notes=row.personalization_notes or "",
+			pain_hypothesis=row.pain_hypothesis or "",
+		)
+		draft = draft_outreach(candidate, campaign)
+		row.outreach_subject = draft.get("subject", "")
+		row.outreach_body = draft.get("body", "")
+		row.personalization_notes = draft.get("personalization_notes", "") or row.personalization_notes
+		row.pain_hypothesis = draft.get("pain_hypothesis", "") or row.pain_hypothesis
+	description = (
+		f"Decision-maker email is available and the prospect is ready to move from social discovery into email outreach.\n\n"
+		f"Company: {row.company_name}\n"
+		f"Email: {row.email}\n"
+		f"Phone: {row.phone or 'n/a'}\n"
+		f"Source channel: {row.source_channel or 'n/a'}\n"
+		f"Profile: {row.source_profile_url or row.source_url or 'n/a'}\n\n"
+		f"Recommended next step: {row.social_next_step or 'Review or send email outreach'}\n\n"
+		f"Suggested subject:\n{row.outreach_subject or 'n/a'}\n\n"
+		f"Suggested body:\n{row.outreach_body or 'n/a'}"
+	)
+	if task_name:
+		frappe.db.set_value("Task", task_name, {"description": description, "priority": "High"}, update_modified=True)
 		return task_name
 	doc = frappe.get_doc(
 		{

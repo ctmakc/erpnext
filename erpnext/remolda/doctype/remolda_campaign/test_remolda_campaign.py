@@ -11,6 +11,7 @@ from erpnext.remolda.doctype.remolda_campaign.remolda_campaign import (
 	infer_contact_gap_status,
 	parse_seed_line,
 	resolve_duckduckgo_url,
+	service_item_code,
 )
 
 
@@ -125,3 +126,7 @@ def test_build_social_outreach_body_mentions_profile():
 	assert "LinkedIn" in body
 	assert "https://www.linkedin.com/company/nordik-hvac" in body
 	assert "dispatching and quoting bottlenecks" in body
+
+
+def test_service_item_code_normalizes_offer_name():
+	assert service_item_code("HVAC AI Workflow Audit") == "REM-HVAC-AI-WORKFLOW-AUDIT"
