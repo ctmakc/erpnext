@@ -39,6 +39,7 @@
   "deal",
   "quotation",
   "sales_order",
+  "sales_invoice",
   "customer",
   "project",
   "support_issue",
@@ -247,6 +248,12 @@
    "fieldtype": "Link",
    "label": "Sales Order",
    "options": "Sales Order"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice"
   },
   {
    "fieldname": "customer",

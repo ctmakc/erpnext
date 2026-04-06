@@ -20,6 +20,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, now_datetime, strip_html
+from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
 SEARCH_HEADERS = {
 	"User-Agent": (
@@ -705,7 +706,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	      </div>
 	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
 	        {''.join(
-				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.project or 'No project')} · {html.escape(getattr(row, 'sales_order', '') or 'No sales order')} · {html.escape(row.upsell_status or '-')}</span></div>"
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.project or 'No project')} · {html.escape(getattr(row, 'sales_order', '') or 'No sales order')} · {html.escape(getattr(row, 'sales_invoice', '') or 'No sales invoice')}</span></div>"
 				for row in customer_rows
 			) or "<div style='color:#64748b;'>No won customers yet.</div>"}
 	      </div>
@@ -2508,6 +2509,8 @@ def ensure_proposal_follow_up_task(row, campaign: RemoldaCampaign) -> str:
 def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[str]) -> None:
 	customer_name = ensure_customer(row, campaign)
 	sales_order_name = ensure_sales_order(row, campaign, customer_name)
+	ensure_sales_order_submitted(sales_order_name)
+	sales_invoice_name = ensure_sales_invoice(row, campaign, customer_name, sales_order_name)
 	project_name = ensure_project(row, campaign, customer_name)
 	onboarding_task = ensure_project_task(
 		project_name,
@@ -2533,6 +2536,7 @@ def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[st
 
 	row.customer = customer_name
 	row.sales_order = sales_order_name
+	row.sales_invoice = sales_invoice_name
 	row.project = project_name
 	row.onboarding_task = onboarding_task
 	row.qbr_task = qbr_task
@@ -2552,7 +2556,7 @@ def ensure_customer_success_motion(campaign: RemoldaCampaign, row, logs: list[st
 		save_doc(doc)
 
 	logs.append(
-		f"Customer-success motion created for {row.company_name}: {customer_name}, {sales_order_name}, {project_name}."
+		f"Customer-success motion created for {row.company_name}: {customer_name}, {sales_order_name}, {sales_invoice_name}, {project_name}."
 	)
 
 
@@ -2675,6 +2679,32 @@ def ensure_sales_order(row, campaign: RemoldaCampaign, customer_name: str) -> st
 	)
 	doc.insert(ignore_permissions=True)
 	add_sales_artifact_comment(row, "Sales Order", doc.name)
+	return doc.name
+
+
+def ensure_sales_order_submitted(sales_order_name: str) -> None:
+	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
+		return
+	doc = frappe.get_doc("Sales Order", sales_order_name)
+	if doc.docstatus == 1:
+		return
+	if doc.docstatus == 0:
+		doc.flags.ignore_permissions = True
+		doc.submit()
+
+
+def ensure_sales_invoice(row, campaign: RemoldaCampaign, customer_name: str, sales_order_name: str) -> str:
+	if getattr(row, "sales_invoice", None) and frappe.db.exists("Sales Invoice", row.sales_invoice):
+		return row.sales_invoice
+	existing = frappe.db.get_value("Sales Invoice", {"customer": customer_name, "po_no": row.deal}, "name")
+	if existing:
+		return existing
+	ensure_sales_order_submitted(sales_order_name)
+	doc = make_sales_invoice(sales_order_name, ignore_permissions=True)
+	doc.po_no = row.deal or f"Remolda-{row.company_name}"
+	doc.due_date = add_days(now_datetime().date(), 14)
+	doc.insert(ignore_permissions=True)
+	add_sales_artifact_comment(row, "Sales Invoice", doc.name)
 	return doc.name
 
 
