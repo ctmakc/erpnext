@@ -538,6 +538,14 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 		if (row.source_channel or "") in {"LinkedIn", "Facebook"}
 		and (getattr(row, "social_outreach_task", None) or getattr(row, "research_task", None))
 	][:5]
+	queued_social_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"][:5]
+	dm_sent_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"][:5]
+	social_replied_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"][:5]
+	ready_for_email_rows = [row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"][:5]
+	queued_social = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Queued"])
+	dm_sent = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "DM Sent"])
+	social_replied = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Replied"])
+	ready_for_email = len([row for row in rows if (getattr(row, "social_stage", "") or "") == "Decision Maker Found"])
 
 	return f"""
 	<div style="display:flex;flex-direction:column;gap:16px;">
@@ -599,6 +607,60 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.project or 'No project')} · {html.escape(row.delivery_status or '-')} · {html.escape(row.upsell_status or '-')}</span></div>"
 				for row in customer_rows
 			) or "<div style='color:#64748b;'>No won customers yet.</div>"}
+	      </div>
+	    </div>
+	  </div>
+
+	  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;">
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">Queued Social</div>
+	        {badge(str(queued_social), "blue")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.source_channel or 'Social')} · {html.escape(getattr(row, 'social_next_step', '') or 'Send DM via social profile')}</span></div>"
+				for row in queued_social_rows
+			) or "<div style='color:#64748b;'>No queued social items.</div>"}
+	      </div>
+	    </div>
+
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">DM Sent Waiting</div>
+	        {badge(str(dm_sent), "amber")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'social_outreach_task', '') or 'No task')} · {html.escape(getattr(row, 'social_next_step', '') or 'Wait for reply')}</span></div>"
+				for row in dm_sent_rows
+			) or "<div style='color:#64748b;'>No sent social items waiting.</div>"}
+	      </div>
+	    </div>
+
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">Social Replied</div>
+	        {badge(str(social_replied), "green")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(getattr(row, 'latest_response_summary', '') or 'Reply logged')} · {html.escape(getattr(row, 'social_next_step', '') or 'Review reply')}</span></div>"
+				for row in social_replied_rows
+			) or "<div style='color:#64748b;'>No social replies yet.</div>"}
+	      </div>
+	    </div>
+
+	    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+	        <div style="font-weight:700;">Ready For Email Conversion</div>
+	        {badge(str(ready_for_email), "green")}
+	      </div>
+	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+	        {''.join(
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.email or 'No email')} · {html.escape(getattr(row, 'social_next_step', '') or 'Move into email outreach')}</span></div>"
+				for row in ready_for_email_rows
+			) or "<div style='color:#64748b;'>No social prospects ready for email conversion.</div>"}
 	      </div>
 	    </div>
 	  </div>
