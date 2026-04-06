@@ -352,6 +352,15 @@ def queue_social_outreach(name: str, row_names: list[str] | str) -> dict[str, An
 			continue
 		row.social_outreach_body = build_social_outreach_body(doc, row)
 		row.social_outreach_task = ensure_social_outreach_task(row, doc)
+		if row.response_status == "Sent" or row.status == "Sent":
+			row.social_stage = "DM Sent"
+			row.social_next_step = "Wait for reply or identify decision maker email"
+		elif row.email:
+			row.social_stage = "Decision Maker Found"
+			row.social_next_step = "Move into email outreach"
+		else:
+			row.social_stage = "Queued"
+			row.social_next_step = "Send DM via social profile"
 		row.contact_gap_status = row.contact_gap_status or "Needs Decision Maker"
 		count += 1
 		logs.append(f"Queued social outreach for {row.company_name}.")
@@ -376,6 +385,8 @@ def mark_social_dm_sent(name: str, row_names: list[str] | str) -> dict[str, Any]
 		row.next_action_on = add_days(now_datetime(), int(doc.follow_up_delay_days or 3))
 		row.outreach_attempts = int(row.outreach_attempts or 0) + 1
 		row.social_outreach_task = ensure_social_outreach_task(row, doc)
+		row.social_stage = "DM Sent"
+		row.social_next_step = "Wait for reply or identify decision maker email"
 		if row.lead:
 			add_social_outreach_comment("Lead", row.lead, row)
 		if row.deal:
@@ -396,6 +407,8 @@ def mark_social_not_interested(name: str, row_names: list[str] | str) -> dict[st
 		row.response_status = "Not Interested"
 		row.status = "Not Interested"
 		row.lifecycle_stage = "Lost"
+		row.social_stage = "Not Interested"
+		row.social_next_step = "Stop outreach"
 		mark_deal_closed(row, "Not Interested", logs)
 		count += 1
 		logs.append(f"Marked {row.company_name} as not interested.")
@@ -414,6 +427,8 @@ def mark_decision_maker_found(
 	row.contact_gap_status = "Ready"
 	row.email_status = classify_email_status(row.email)
 	row.last_error = ""
+	row.social_stage = "Decision Maker Found"
+	row.social_next_step = "Move into email outreach"
 	if row.response_status in {"No Email Found", "", None}:
 		row.response_status = "Ready To Send" if doc.auto_send_outreach else "Awaiting Outreach"
 	if row.status in {"No Email Found", "Failed", "", None}:
@@ -434,16 +449,22 @@ def log_social_reply(name: str, row_name: str, reply_text: str) -> dict[str, Any
 	row.latest_response_summary = summary
 	row.response_status = classification
 	row.status = classification if classification in {"Interested", "Won", "Not Interested"} else "Replied"
+	row.social_stage = classification if classification in {"Interested", "Won", "Not Interested"} else "Replied"
 	if classification == "Interested":
 		row.lifecycle_stage = "Proposal"
+		row.social_next_step = "Prepare proposal and continue deal"
 		ensure_proposal(doc, row, [])
 	elif classification == "Won":
 		row.lifecycle_stage = "Won"
+		row.social_next_step = "Kick off delivery"
 		ensure_customer_success_motion(doc, row, [])
 		process_post_sale_motion(doc, row, [])
 	elif classification == "Not Interested":
 		row.lifecycle_stage = "Lost"
+		row.social_next_step = "Stop outreach"
 		mark_deal_closed(row, "Not Interested", [])
+	else:
+		row.social_next_step = "Review reply and decide next move"
 	add_social_reply_comment(row, reply_text, classification)
 	logs = [f"Logged social reply for {row.company_name}: {classification}."]
 	return finalize_campaign_action(doc, logs, 1)
@@ -562,7 +583,7 @@ def build_operator_snapshot_html(doc: RemoldaCampaign) -> str:
 	      </div>
 	      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
 	        {''.join(
-				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.source_channel or 'Social')} · {html.escape(getattr(row, 'social_outreach_task', '') or getattr(row, 'research_task', '') or 'No task')}</span></div>"
+				f"<div style='padding:8px;border:1px solid #f1f5f9;border-radius:10px;'><b>{html.escape(row.company_name or '')}</b><br><span style='color:#64748b;'>{html.escape(row.source_channel or 'Social')} · {html.escape(getattr(row, 'social_outreach_task', '') or getattr(row, 'research_task', '') or 'No task')}</span><br><span style='color:#94a3b8;'>{html.escape(getattr(row, 'social_stage', '') or 'Queued')} · {html.escape(getattr(row, 'social_next_step', '') or 'Review social prospect')}</span></div>"
 				for row in social_rows
 			) or "<div style='color:#64748b;'>No social outreach items.</div>"}
 	      </div>
@@ -1339,6 +1360,29 @@ def backfill_row_operational_fields(campaign: RemoldaCampaign, row) -> None:
 	row.priority_tier = row.priority_tier or priority_tier(int(row.icp_score or 0))
 	row.service_fit = row.service_fit or infer_service_fit(candidate, campaign)
 	row.contact_gap_status = row.contact_gap_status or infer_contact_gap_status(candidate)
+	if (row.source_channel or "") in {"LinkedIn", "Facebook"}:
+		if not getattr(row, "social_stage", None):
+			if row.response_status in {"Interested", "Won", "Not Interested"}:
+				row.social_stage = row.response_status
+			elif row.response_status == "Sent":
+				row.social_stage = "DM Sent"
+			elif row.email:
+				row.social_stage = "Decision Maker Found"
+			else:
+				row.social_stage = "Queued"
+		if not getattr(row, "social_next_step", None):
+			if row.social_stage == "DM Sent":
+				row.social_next_step = "Wait for reply or identify decision maker email"
+			elif row.social_stage == "Decision Maker Found":
+				row.social_next_step = "Move into email outreach"
+			elif row.social_stage == "Interested":
+				row.social_next_step = "Prepare proposal and continue deal"
+			elif row.social_stage == "Won":
+				row.social_next_step = "Kick off delivery"
+			elif row.social_stage == "Not Interested":
+				row.social_next_step = "Stop outreach"
+			else:
+				row.social_next_step = "Send DM via social profile"
 
 
 def process_prospect_workflow(campaign: RemoldaCampaign, row, logs: list[str]) -> None:

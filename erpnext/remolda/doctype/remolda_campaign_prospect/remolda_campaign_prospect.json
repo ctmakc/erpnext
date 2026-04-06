@@ -43,6 +43,8 @@
   "qbr_task",
   "research_task",
   "social_outreach_task",
+  "social_stage",
+  "social_next_step",
   "upsell_deal",
   "last_error",
   "latest_response_summary",
@@ -263,6 +265,17 @@
    "fieldtype": "Link",
    "label": "Social Outreach Task",
    "options": "Task"
+  },
+  {
+   "fieldname": "social_stage",
+   "fieldtype": "Select",
+   "label": "Social Stage",
+   "options": "Queued\nDM Sent\nReplied\nInterested\nWon\nNot Interested\nDecision Maker Found"
+  },
+  {
+   "fieldname": "social_next_step",
+   "fieldtype": "Data",
+   "label": "Social Next Step"
   },
   {
    "fieldname": "upsell_deal",
