@@ -63,7 +63,7 @@ def _purchase_rows(company: str, from_date, to_date) -> list[dict[str, Any]]:
         {
             "id": row.name,
             "number": row.bill_no or row.name,
-            "date": formatdate(row.posting_date, "dd.MM.yyyy"),
+            "date": formatdate(row.posting_date),
             "counterparty": row.supplier_name or row.supplier,
             "warehouse": row.set_warehouse or "",
             "amount": flt(row.grand_total),
@@ -76,16 +76,160 @@ def _purchase_rows(company: str, from_date, to_date) -> list[dict[str, Any]]:
     ]
 
 
+def _reference_data(company: str) -> dict[str, Any]:
+    suppliers = frappe.get_list(
+        "Supplier",
+        fields=["name", "supplier_name", "tax_id"],
+        order_by="supplier_name asc",
+        limit_page_length=500,
+    )
+    items = frappe.get_list(
+        "Item",
+        filters={"disabled": 0},
+        fields=["name", "item_name", "is_stock_item", "stock_uom"],
+        order_by="item_name asc",
+        limit_page_length=1000,
+    )
+    warehouses = frappe.get_list(
+        "Warehouse",
+        filters={"company": company, "is_group": 0, "disabled": 0},
+        fields=["name", "warehouse_name"],
+        order_by="warehouse_name asc",
+        limit_page_length=500,
+    )
+
+    return {
+        "suppliers": [
+            {
+                "id": row.name,
+                "name": row.supplier_name or row.name,
+                "taxId": row.tax_id,
+            }
+            for row in suppliers
+        ],
+        "items": [
+            {
+                "id": row.name,
+                "name": row.item_name or row.name,
+                "isStockItem": bool(row.is_stock_item),
+                "uom": row.stock_uom,
+            }
+            for row in items
+        ],
+        "warehouses": [
+            {"id": row.name, "name": row.warehouse_name or row.name}
+            for row in warehouses
+        ],
+    }
+
+
 @frappe.whitelist()
 def bootstrap(from_date: str | None = None, to_date: str | None = None) -> dict[str, Any]:
-    """Return the minimum shell data needed by the accountant-facing UI."""
+    """Return shell, journal and reference data for the accountant-facing UI."""
     company = _current_company()
     start, end = _period_bounds(from_date, to_date)
 
     return {
         "company": company,
-        "period": f"{formatdate(start, 'dd.MM.yyyy')} — {formatdate(end, 'dd.MM.yyyy')}",
+        "period": f"{formatdate(start)} — {formatdate(end)}",
         "purchases": _purchase_rows(company, start, end),
+        **_reference_data(company),
+    }
+
+
+def _validate_purchase_payload(payload: dict[str, Any]) -> None:
+    if not payload.get("supplier"):
+        frappe.throw(_("Supplier is required."))
+    if not payload.get("items"):
+        frappe.throw(_("At least one item is required."))
+
+    for index, row in enumerate(payload["items"], start=1):
+        if not row.get("item_code"):
+            frappe.throw(_("Item is required in row {0}.").format(index))
+        if flt(row.get("qty")) <= 0:
+            frappe.throw(_("Quantity must be greater than zero in row {0}.").format(index))
+        if flt(row.get("rate")) < 0:
+            frappe.throw(_("Rate cannot be negative in row {0}.").format(index))
+
+
+def _purchase_doc_from_payload(payload: dict[str, Any]):
+    _validate_purchase_payload(payload)
+
+    company = payload.get("company") or _current_company()
+    document_id = payload.get("document_id")
+
+    if document_id:
+        doc = frappe.get_doc("Purchase Invoice", document_id)
+        doc.check_permission("write")
+        if doc.docstatus != 0:
+            frappe.throw(_("Only draft purchase documents can be edited."))
+        doc.set("items", [])
+    else:
+        doc = frappe.new_doc("Purchase Invoice")
+        doc.company = company
+
+    doc.supplier = payload["supplier"]
+    doc.posting_date = payload.get("posting_date") or nowdate()
+    doc.set_posting_time = 1
+    doc.bill_no = payload.get("number") or None
+    doc.set_warehouse = payload.get("warehouse") or None
+
+    item_codes = [row["item_code"] for row in payload["items"]]
+    stock_flags = frappe.get_all(
+        "Item",
+        filters={"name": ["in", item_codes]},
+        fields=["name", "is_stock_item"],
+    )
+    stock_by_item = {row.name: bool(row.is_stock_item) for row in stock_flags}
+    has_stock_items = any(stock_by_item.get(code, False) for code in item_codes)
+
+    if has_stock_items and not doc.set_warehouse:
+        frappe.throw(_("Warehouse is required when the purchase contains stock items."))
+
+    doc.update_stock = 1 if has_stock_items else 0
+
+    for row in payload["items"]:
+        child = {
+            "item_code": row["item_code"],
+            "qty": flt(row["qty"]),
+            "rate": flt(row["rate"]),
+        }
+        if stock_by_item.get(row["item_code"], False):
+            child["warehouse"] = doc.set_warehouse
+        doc.append("items", child)
+
+    return doc
+
+
+@frappe.whitelist(methods=["POST"])
+def save_purchase(payload: dict[str, Any] | str, submit: bool | int | str = False) -> dict[str, Any]:
+    """Create/update a Purchase Invoice and optionally submit it.
+
+    This is deliberately thin: ERPNext remains responsible for validation,
+    ledger posting and stock posting. The compatibility API only translates
+    the user-facing document into the backend document.
+    """
+    if isinstance(payload, str):
+        payload = frappe.parse_json(payload)
+
+    doc = _purchase_doc_from_payload(payload)
+
+    if doc.is_new():
+        doc.insert()
+    else:
+        doc.save()
+
+    should_submit = str(submit).lower() in {"1", "true", "yes"}
+    if should_submit:
+        doc.submit()
+
+    return {
+        "id": doc.name,
+        "status": "posted" if doc.docstatus == 1 else "draft",
+        "docstatus": doc.docstatus,
+        "grandTotal": flt(doc.grand_total),
+        "currency": doc.currency,
+        "voucherType": "Purchase Invoice",
     }
 
 
@@ -125,7 +269,7 @@ def _pair_gl_entries(entries: list[dict[str, Any]], currency: str) -> list[dict[
             result.append(
                 {
                     "id": f"{debit_entry.get('name')}:{credit_entry.get('name')}:{len(result)}",
-                    "date": formatdate(debit_entry.get("posting_date"), "dd.MM.yyyy"),
+                    "date": formatdate(debit_entry.get("posting_date")),
                     "debit": debit_entry.get("account") or "—",
                     "credit": credit_entry.get("account") or "—",
                     "amount": amount,
