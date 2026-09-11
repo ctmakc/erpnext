@@ -7,7 +7,10 @@ export interface PurchaseRow {
   counterparty: string;
   warehouse: string;
   amount: number;
+  currency?: string;
   status: DocumentStatus;
+  backendStatus?: string;
+  voucherType: 'Purchase Invoice';
 }
 
 export interface PostingRow {

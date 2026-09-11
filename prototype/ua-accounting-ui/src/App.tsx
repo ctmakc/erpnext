@@ -35,7 +35,7 @@ export default function App() {
   async function openPostings(row: PurchaseRow) {
     setSelected(row);
     try {
-      setPostings(await getPostings(row.id));
+      setPostings(await getPostings(row));
     } catch (e) {
       setError(String(e));
     }
@@ -112,7 +112,7 @@ export default function App() {
                     <td><button className="link">{row.number}</button></td>
                     <td>{row.counterparty}</td>
                     <td>{row.warehouse}</td>
-                    <td className="num">{money(row.amount)}</td>
+                    <td className="num">{money(row.amount)} {row.currency ?? ''}</td>
                     <td>{row.status === 'posted' ? 'Проведено' : 'Не проведено'}</td>
                     <td><button disabled={row.status !== 'posted'} onClick={(e) => { e.stopPropagation(); void openPostings(row); }}>Дт/Кт</button></td>
                   </tr>

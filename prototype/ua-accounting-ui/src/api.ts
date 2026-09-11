@@ -1,6 +1,7 @@
-import type { BootstrapData, PostingRow } from './types';
+import type { BootstrapData, PostingRow, PurchaseRow } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/$/, '') ?? '';
+const RPC_PREFIX = import.meta.env.VITE_RPC_PREFIX ?? 'erpnext.ua_accounting.api';
 const USE_MOCK = !API_BASE || import.meta.env.VITE_MOCK === 'true';
 
 const mockBootstrap: BootstrapData = {
@@ -14,7 +15,9 @@ const mockBootstrap: BootstrapData = {
       counterparty: 'ТОВ «Постачальник»',
       warehouse: 'Основний склад',
       amount: 10000,
+      currency: 'UAH',
       status: 'posted',
+      voucherType: 'Purchase Invoice',
     },
     {
       id: 'PINV-2026-0002',
@@ -23,7 +26,9 @@ const mockBootstrap: BootstrapData = {
       counterparty: 'ТОВ «Тест Сервіс»',
       warehouse: 'Основний склад',
       amount: 2400,
+      currency: 'UAH',
       status: 'draft',
+      voucherType: 'Purchase Invoice',
     },
   ],
 };
@@ -46,7 +51,7 @@ const mockPostings: Record<string, PostingRow[]> = {
 };
 
 async function rpc<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}/api/method/${method}`, {
+  const response = await fetch(`${API_BASE}/api/method/${RPC_PREFIX}.${method}`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -59,12 +64,12 @@ async function rpc<T>(method: string, args: Record<string, unknown> = {}): Promi
 
 export async function getBootstrap(): Promise<BootstrapData> {
   if (USE_MOCK) return Promise.resolve(mockBootstrap);
-  return rpc<BootstrapData>('ua_accounting_adapter.api.bootstrap');
+  return rpc<BootstrapData>('bootstrap');
 }
 
-export async function getPostings(documentId: string): Promise<PostingRow[]> {
-  if (USE_MOCK) return Promise.resolve(mockPostings[documentId] ?? []);
-  return rpc<PostingRow[]>('ua_accounting_adapter.api.postings', { document_id: documentId });
+export async function getPostings(row: PurchaseRow): Promise<PostingRow[]> {
+  if (USE_MOCK) return Promise.resolve(mockPostings[row.id] ?? []);
+  return rpc<PostingRow[]>('postings', { document_id: row.id, voucher_type: row.voucherType });
 }
 
 export const runtimeMode = USE_MOCK ? 'MOCK' : 'ERPNext';
